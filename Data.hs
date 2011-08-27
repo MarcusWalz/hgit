@@ -33,8 +33,8 @@ createGitProcess' :: GitConfig -> GitCommand -> CreateProcess
 createGitProcess' GitConfig  { gitCwd = gitCwd', gitPath = gitPath }
                  GitCommand { gitCmd = cmd, args = args'}
   = (proc (fromMaybe "git" gitPath) args'')
-  { std_in = CreatePipe 
-  , cwd = Just gitCwd' 
+  { cwd = Just gitCwd' 
+  , std_in = CreatePipe
   , std_out = CreatePipe 
   , std_err = CreatePipe 
   , close_fds = True }
@@ -104,6 +104,18 @@ objReader = [ (B.pack "commit" , Commit )
             , (B.pack "tag"    , Tag    )
             , (B.pack "tree"   , Tree   ) ]
 
+getIdFromObj :: GitObject -> ID
+getIdFromObj (Commit id) = id
+getIdFromObj (Blob   id) = id
+getIdFromObj (Tag    id) = id
+getIdFromObj (Tree   id) = id
+
+getStringFromObj :: GitObject -> ByteString
+getStringFromObj (Commit id) = B.unwords $ [B.pack "commit", id]
+getStringFromObj (Blob   id) = B.unwords $ [B.pack "blob"  , id]
+getStringFromObj (Tag    id) = B.unwords $ [B.pack "tag"   , id]
+getStringFromObj (Tree   id) = B.unwords $ [B.pack "tree"  , id]
+
 readObjStr :: ByteString -> ID -> Maybe GitObject
 readObjStr t id = find (\(x,n) -> t == x) objReader >>= \(x,n) -> Just (n id)
 
@@ -145,8 +157,47 @@ revList = do
   return $ x
   where cmd = makeGitCommand (B.pack "rev-list") [B.pack "HEAD"]
 
+catObject :: GitObject -> GitReader (Maybe ByteString)
+catObject a = do
+  (_,outh,_,_) <- spawnGitProcess cmd
+  x <- liftIO $ B.hGetContents outh
+  return $ Just x 
+  where cmd = makeGitCommand (B.pack "cat-file") (B.words $ getStringFromObj a)
+
+catI :: [GitObject] -> Handle -> Handle -> Handle -> Handle-> IO [Maybe ByteString]
+catI [] inh outh inc outc= do 
+  mapM hClose [inh, outh, inc, outc]
+  return []
+
+--uses --batch-check to make sure object exists and to get size
+--then uses --batch to fetch object surprisingly fast
+
+catI (x:xs) inh outh inc outc= do
+  B.hPutStrLn inc $ getIdFromObj x
+  hFlush inc
+  checkStr <- B.hGetLine outc 
+  let check = drop 2 $ B.words $ checkStr
+  if check == [] then do
+              r <- catI xs inh outh inc outc 
+              return $ Nothing : r
+         else do 
+              B.hPutStrLn inh $ getIdFromObj x
+              hFlush inh
+              a <- B.hGet outh $ fst $ fromJust $ B.readInt $ head $ check 
+              r <- catI xs inh outh inc outc 
+              return $ (Just a) : r
+
+catObjects :: [GitObject] -> GitReader [Maybe ByteString]
+catObjects objs = do
+  (inh, outh, _, pid) <- spawnGitProcess cmd
+  (inc, outc, _, _)   <- spawnGitProcess cmdChecker
+  x <- liftIO $ catI objs inh outh inc outc 
+  return x 
+  where cmd = makeGitCommand (B.pack "cat-file") [B.pack "--batch"] 
+        cmdChecker = makeGitCommand (B.pack "cat-file") [B.pack "--batch-check"]
+
 main = do
   a <- runGit c $ revList 
-  putStrLn $ show $ length a 
+  runGit c $ catObjects a
   where 
     c = makeGitConfig "../progit" Nothing
