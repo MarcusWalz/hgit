@@ -62,8 +62,7 @@ type BlobID   = ID
 type TreeID   = ID 
 type TagID    = ID
 
-data GitObject = 
-                 Commit CommitID 
+data GitObject = Commit CommitID 
                | Blob   BlobID
                | Tree   TreeID
                | Tag    TagID
@@ -108,18 +107,18 @@ objReader = [ (B.pack "commit" , Commit )
 readObjStr :: ByteString -> ID -> Maybe GitObject
 readObjStr t id = find (\(x,n) -> t == x) objReader >>= \(x,n) -> Just (n id)
 
-readTreeNodeLine :: ByteString -> TreeNode
+readTreeNodeLine :: ByteString -> Maybe TreeNode
 readTreeNodeLine str =
-  TreeNode {mode = m, object = o, name = n}
+  o >>= \x -> Just TreeNode {mode = m, object = x, name = n}
   where m = fst $ fromJust $ B.readInt $ head w 
-        o = fromJust $ readObjStr' $ B.unwords $ take 2 $ drop 1 w
+        o = readObjStr' $ B.unwords $ take 2 $ drop 1 w
         n = B.unwords $ drop 3 w
         w = B.words str
 
 data Trees = Trees [TreeNode]
   deriving (Show)
 
-readProc :: (ByteString -> a) -> Handle -> IO [a]
+readProc :: (ByteString -> Maybe a) -> Handle -> IO [a]
 readProc f h = do
   eof <- hIsEOF h
   if eof 
@@ -127,11 +126,27 @@ readProc f h = do
             return [] 
     else do a <- B.hGetLine h
             m <- readProc f h
-            return $ [f a] ++ m 
+            return $ (maybeToList (f a)) ++ m
   
-readTree :: GitReader [TreeNode]
+readTree :: GitReader Trees 
 readTree = do
   (_,outh,_,_) <- spawnGitProcess cmd
   x <- liftIO $ readProc readTreeNodeLine outh
-  return x
+  return $ Trees x
   where cmd = makeGitCommand (B.pack "ls-tree") [B.pack "HEAD"]
+  
+readRevListLine :: ID -> Maybe GitObject 
+readRevListLine id = Just $ Commit id
+
+revList :: GitReader [GitObject]
+revList = do 
+  (_,outh,_,_) <- spawnGitProcess cmd
+  x <- liftIO $ readProc readRevListLine outh
+  return $ x
+  where cmd = makeGitCommand (B.pack "rev-list") [B.pack "HEAD"]
+
+main = do
+  a <- runGit c $ revList 
+  putStrLn $ show $ length a 
+  where 
+    c = makeGitConfig "../progit" Nothing
