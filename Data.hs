@@ -26,9 +26,10 @@ module Lib.HGit.Type
 import           System.Command
 import           System.IO
 import           Control.Monad.Reader
-import           Data.ByteString.Char8 (ByteString)
 import           Data.Maybe
-import qualified Data.ByteString.Char8 as B
+import qualified Data.Text as T
+import           Data.Text (Text)
+import           Data.Text.Encoding as E
 import           Data.List (find)
 
 data GitConfig  = GitConfig
@@ -40,11 +41,11 @@ makeGitConfig :: FilePath -> Maybe FilePath -> GitConfig
 makeGitConfig cwd' gitPath' = GitConfig {gitCwd = cwd', gitPath = gitPath'}
 
 data GitCommand = GitCommand
-  { gitCmd  :: ByteString 
-  , args :: [ByteString] }
+  { gitCmd  :: Text 
+  , args :: [Text] }
   deriving (Show)
   
-makeGitCommand :: ByteString -> [ByteString] -> GitCommand 
+makeGitCommand :: Text -> [Text] -> GitCommand 
 makeGitCommand cmd args' = GitCommand {gitCmd = cmd, args = args'}
 
 newtype GitReader a = GitReader (ReaderT GitConfig IO a)
@@ -59,7 +60,7 @@ createGitProcess' GitConfig  { gitCwd = gitCwd', gitPath = gitPath }
   , std_out = CreatePipe 
   , std_err = CreatePipe 
   , close_fds = True }
-  where args'' = map B.unpack $ [cmd] ++ args'
+  where args'' = map T.unpack $ [cmd] ++ args'
 
 createGitProcess :: GitCommand -> GitReader CreateProcess 
 createGitProcess command = do
@@ -77,7 +78,7 @@ spawnGitProcess command = do
 runGit :: GitConfig -> GitReader t -> IO t
 runGit config (GitReader a) = runReaderT a config
 
-type ID       = ByteString
+type ID       = Text 
 type CommitID = ID 
 type BlobID   = ID 
 type TreeID   = ID 
@@ -90,41 +91,41 @@ data GitObject = Commit CommitID
   deriving (Show)
 
 data Person = Person 
-  { personName  :: ByteString
-  , personEmail :: ByteString
+  { personName  :: Text 
+  , personEmail :: Text 
   } deriving (Show)
 
 data Commitent = Commitent
   { ceParents       :: [CommitID]
   , ceTree          :: TreeID
   , ceAuthor        :: Person
-  , ceAuthorTime    :: ByteString
+  , ceAuthorTime    :: Text 
   , ceCommitter     :: Person
-  , ceCommitterTime :: ByteString 
-  , ceCommitMsg     :: ByteString
+  , ceCommitterTime :: Text
+  , ceCommitMsg     :: Text 
   } deriving (Show)
 
 data TreeNode = TreeNode
   { mode      :: Int
   , object    :: GitObject
-  , name      :: ByteString }
+  , name      :: Text }
   deriving (Show)
 
 data Trees = Trees [TreeNode]
   deriving (Show)
 
-readObjStr' :: ByteString -> Maybe GitObject
+readObjStr' :: Text -> Maybe GitObject
 readObjStr' str = 
   readObjStr s objT 
-  where w = B.words str 
+  where w = T.words str 
         s = head w
         objT = last w
 
-objReader :: [ (ByteString, ID -> GitObject) ]
-objReader = [ (B.pack "commit" , Commit )
-            , (B.pack "blob"   , Blob   )
-            , (B.pack "tag"    , Tag    )
-            , (B.pack "tree"   , Tree   ) ]
+objReader :: [ (Text, ID -> GitObject) ]
+objReader = [ (T.pack "commit" , Commit )
+            , (T.pack "blob"   , Blob   )
+            , (T.pack "tag"    , Tag    )
+            , (T.pack "tree"   , Tree   ) ]
 
 getIdFromObj :: GitObject -> ID
 getIdFromObj (Commit id) = id
@@ -132,11 +133,11 @@ getIdFromObj (Blob   id) = id
 getIdFromObj (Tag    id) = id
 getIdFromObj (Tree   id) = id
 
-getStringFromObj :: GitObject -> ByteString
-getStringFromObj (Commit id) = B.unwords $ [B.pack "commit", id]
-getStringFromObj (Blob   id) = B.unwords $ [B.pack "blob"  , id]
-getStringFromObj (Tag    id) = B.unwords $ [B.pack "tag"   , id]
-getStringFromObj (Tree   id) = B.unwords $ [B.pack "tree"  , id]
+getStringFromObj :: GitObject -> Text 
+getStringFromObj (Commit id) = T.unwords $ [T.pack "commit", id]
+getStringFromObj (Blob   id) = T.unwords $ [T.pack "blob"  , id]
+getStringFromObj (Tag    id) = T.unwords $ [T.pack "tag"   , id]
+getStringFromObj (Tree   id) = T.unwords $ [T.pack "tree"  , id]
 
-readObjStr :: ByteString -> ID -> Maybe GitObject
+readObjStr :: Text -> ID -> Maybe GitObject
 readObjStr t id = find (\(x,n) -> t == x) objReader >>= \(x,n) -> Just (n id)

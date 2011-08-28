@@ -1,36 +1,38 @@
 import           System.Command
 import           System.IO
 import           Control.Monad.Reader
-import           Data.ByteString.Char8 (ByteString)
-import qualified Data.ByteString.Char8 as B
+import qualified Data.Text as T
+import qualified Data.Text.IO as T
+import           Data.Text (Text)
+import           Data.Text.Encoding as E
 import           Data.Maybe
 
 import           Lib.HGit.Type
 
-readProc :: (ByteString -> Maybe a) -> Handle -> IO [a]
+readProc :: (Text -> Maybe a) -> Handle -> IO [a]
 readProc f h = do
   eof <- hIsEOF h
   if eof 
     then do hClose h
             return [] 
-    else do a <- B.hGetLine h
+    else do a <- T.hGetLine h
             m <- readProc f h
             return $ (maybeToList (f a)) ++ m
 
-readTreeNodeLine :: ByteString -> Maybe TreeNode
+readTreeNodeLine :: Text -> Maybe TreeNode
 readTreeNodeLine str =
   o >>= \x -> Just TreeNode {mode = m, object = x, name = n}
-  where m = fst $ fromJust $ B.readInt $ head w 
-        o = readObjStr' $ B.unwords $ take 2 $ drop 1 w
-        n = B.unwords $ drop 3 w
-        w = B.words str --ahh? donde esta
+  where m = read $ T.unpack $ head w :: Int
+        o = readObjStr' $ T.unwords $ take 2 $ drop 1 w
+        n = T.unwords $ drop 3 w
+        w = T.words str --ahh? donde esta
 
 readTree :: GitReader Trees 
 readTree = do
   (_,outh,_,_) <- spawnGitProcess cmd
   x <- liftIO $ readProc readTreeNodeLine outh
   return $ Trees x
-  where cmd = makeGitCommand (B.pack "ls-tree") [B.pack "HEAD"]
+  where cmd = makeGitCommand (T.pack "ls-tree") [T.pack "HEAD"]
 
 readRevListLine :: ID -> Maybe GitObject 
 readRevListLine id = Just $ Commit id
@@ -40,44 +42,43 @@ revList = do
   (_,outh,_,_) <- spawnGitProcess cmd
   x <- liftIO $ readProc readRevListLine outh
   return $ x
-  where cmd = makeGitCommand (B.pack "rev-list") [B.pack "HEAD"]
+  where cmd = makeGitCommand (T.pack "rev-list") [T.pack "HEAD"]
 
-catObject :: GitObject -> GitReader (Maybe ByteString)
+catObject :: GitObject -> GitReader (Maybe Text)
 catObject a = do
   (_,outh,_,_) <- spawnGitProcess cmd
-  x <- liftIO $ B.hGetContents outh
+  x <- liftIO $ T.hGetContents outh
   return $ Just x 
-  where cmd = makeGitCommand (B.pack "cat-file") (B.words $ getStringFromObj a)
+  where cmd = makeGitCommand (T.pack "cat-file") (T.words $ getStringFromObj a)
 
 
-catI :: [GitObject] -> Handle -> Handle -> Handle -> Handle-> IO [Maybe ByteString]
-catI [] inh outh inc outc= do 
-  mapM hClose [inh, outh, inc, outc]
+{--
+catI :: [GitObject] -> Handle -> Handle-> IO [Maybe Text]
+catI [] inh outh = do 
+  mapM hClose [inh, outh]
   return []
 
---uses --batch-check to make sure object exists and to get size
---then uses --batch to fetch object surprisingly fast
+catI (x:xs) inh outh= do
+  T.hPutStrLn inh $ getIdFromObj x
+  hFlush inh
+  checkStr <- T.hGetLine outh
+  let check = T.readInt $ last $ T.words $ checkStr
+  if isNothing check
+    then do
+      r <- catI xs inh outh
+      putStrLn "test"
+      return $ Nothing : r
+    else do 
+      a <- T.hGet outh (fst $ fromJust $ check ) 
+      T.putStrLn checkStr
+      r <- catI xs inh outh
+      return $ (Just a) : r
 
-catI (x:xs) inh outh inc outc= do
-  B.hPutStrLn inc $ getIdFromObj x
-  hFlush inc
-  checkStr <- B.hGetLine outc 
-  let check = drop 2 $ B.words $ checkStr
-  if check == [] then do
-              r <- catI xs inh outh inc outc 
-              return $ Nothing : r
-         else do 
-              B.hPutStrLn inh $ getIdFromObj x
-              hFlush inh
-              a <- B.hGet outh $ fst $ fromJust $ B.readInt $ head $ check 
-              r <- catI xs inh outh inc outc 
-              return $ (Just a) : r
-
-catObjects :: [GitObject] -> GitReader [Maybe ByteString]
+catObjects :: [GitObject] -> GitReader [Maybe Text]
 catObjects objs = do
   (inh, outh, _, pid) <- spawnGitProcess cmd
-  (inc, outc, _, _)   <- spawnGitProcess cmdChecker
-  x <- liftIO $ catI objs inh outh inc outc 
+  x <- liftIO $ catI objs inh outh 
   return x 
-  where cmd = makeGitCommand (B.pack "cat-file") [B.pack "--batch"] 
-        cmdChecker = makeGitCommand (B.pack "cat-file") [B.pack "--batch-check"]
+  where cmd = makeGitCommand (T.pack "cat-file") [T.pack "--batch"]
+
+--}
