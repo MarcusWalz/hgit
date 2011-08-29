@@ -10,6 +10,20 @@ import           Data.Maybe
 
 import           Lib.HGit.Type
 
+--Runs a command, returns true if command was successful 
+runGitCommand :: GitCommand -> GitReader Bool 
+runGitCommand cmd = do 
+  (_,_,errh,_) <- spawnGitProcess cmd
+  liftIO $ do 
+    e <-T.hGetContents errh
+    if e == T.empty 
+      then return True
+      else do
+        putStrLn "Git Error: "
+        T.putStrLn e
+        return False
+
+--Useful for reading line by line
 readProc :: (Text -> Maybe a) -> Handle -> IO [a]
 readProc f h = do
   eof <- hIsEOF h
@@ -19,6 +33,7 @@ readProc f h = do
     else do a <- T.hGetLine h
             m <- readProc f h
             return $ (maybeToList (f a)) ++ m
+
 
 readTreeNodeLine :: Text -> Maybe TreeNode
 readTreeNodeLine str =
@@ -45,12 +60,23 @@ revList = do
   return $ x
   where cmd = makeGitCommand (T.pack "rev-list") [T.pack "HEAD"]
 
+
+gitAbstractCat :: [Text] -> (Handle -> IO a) -> GitReader (Maybe a)
+gitAbstractCat a f = do
+  (inh, outh, errh, pid) <- spawnGitProcess cmd
+  a <- liftIO $ T.hGetContents errh
+  if a == T.empty 
+    then do x <- liftIO $ f outh 
+            return $ Just x
+    else return Nothing
+  where cmd = makeGitCommand (T.pack "cat-file") a
+
 catObject :: GitObject -> GitReader (Maybe Text)
-catObject a = do
-  (_,outh,_,_) <- spawnGitProcess cmd
-  x <- liftIO $ T.hGetContents outh
-  return $ Just x 
-  where cmd = makeGitCommand (T.pack "cat-file") (T.words $ getStringFromObj a)
+catObject obj = gitAbstractCat args T.hGetContents
+  where args = T.words $ getStringFromObj obj 
+
+--Really only useful for reading multiple files 
+--To use parsers stick the Text into some sort of buffer
 
 catI :: [GitObject] -> Handle -> Handle-> IO [Maybe Text]
 catI [] inh outh = do 
@@ -96,7 +122,7 @@ getPersonAndDate str = Just (p, date)
         email = T.tail $ T.takeWhile (\x -> x /= '>') $ T.dropWhile (\x -> x /= '<') str
         date = T.drop 2 $ T.dropWhile (\x -> x /= '>') str 
  
-readCommit' :: Handle -> IO (Maybe Commitent)
+readCommit' :: Handle -> IO Commitent
 readCommit' h = do
   tr <- T.hGetLine h
   let tree = readObjStr' tr 
@@ -106,7 +132,7 @@ readCommit' h = do
   cl <- T.hGetLine h
   let commi = getPersonAndDate $ T.drop 10 $ cl 
   msg <- T.hGetContents h
-  return (Just Commitent {
+  return (Commitent { 
     ceParents       = p
   , ceTree          = fromJust $ tree
   , ceAuthor        = fst $ fromJust $ auth
@@ -116,8 +142,5 @@ readCommit' h = do
   , ceCommitMsg     = msg })
 
 readCommit :: CommitID -> GitReader (Maybe Commitent)
-readCommit id = do
-  (_,outh,_,_) <- spawnGitProcess cmd
-  a <- liftIO $ readCommit' outh
-  return a
-  where cmd = makeGitCommand (T.pack "cat-file") [T.pack "commit", id]
+readCommit id = gitAbstractCat obj readCommit'
+  where obj = [T.pack "commit", id]
