@@ -10,9 +10,10 @@ module Lib.HGit.Type
   , createGitProcess
   , spawnGitProcess
   , ID
-  , CommitID
-  , BlobID
-  , TagID
+  , CommitID(..)
+  , BlobID(..)
+  , TagID(..)
+  , TreeID(..)
   , GitObject(..)
   , Person(..)
   , Commitent(..)
@@ -96,8 +97,8 @@ data Person = Person
   } deriving (Show)
 
 data Commitent = Commitent
-  { ceParents       :: [CommitID]
-  , ceTree          :: TreeID
+  { ceParents       :: [GitObject]
+  , ceTree          :: GitObject 
   , ceAuthor        :: Person
   , ceAuthorTime    :: Text 
   , ceCommitter     :: Person
