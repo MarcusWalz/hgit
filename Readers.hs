@@ -10,18 +10,6 @@ import           Data.Maybe
 
 import           Lib.HGit.Type
 
---Runs a command, returns true if command was successful 
-runGitCommand :: GitCommand -> GitReader Bool 
-runGitCommand cmd = do 
-  (_,_,errh,_) <- spawnGitProcess cmd
-  liftIO $ do 
-    e <-T.hGetContents errh
-    if e == T.empty 
-      then return True
-      else do
-        putStrLn "Git Error: "
-        T.putStrLn e
-        return False
 
 --Useful for reading line by line
 readProc :: (Text -> Maybe a) -> Handle -> IO [a]
