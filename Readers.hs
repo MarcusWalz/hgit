@@ -23,6 +23,16 @@ readProc f h = do
             return $ (maybeToList (f a)) ++ m
 
 
+readGit :: GitCommand -> GitReader (Maybe Text)
+readGit cmd = do  
+    (_,outh, errh, pid) <- spawnGitProcess cmd
+    e <- liftIO $ T.hGetContents errh
+    if e == T.empty
+      then liftIO $ do i <- T.hGetContents outh 
+                       return $ Just i
+      else liftIO $ do T.putStrLn e
+                       return Nothing
+
 readTreeNodeLine :: Text -> Maybe TreeNode
 readTreeNodeLine str =
   o >>= \x -> Just TreeNode {mode = m, object = x, name = n}
@@ -33,9 +43,9 @@ readTreeNodeLine str =
 
 readTree :: GitReader Trees 
 readTree = do
-  (_,outh,_,_) <- spawnGitProcess cmd
-  x <- liftIO $ readProc readTreeNodeLine outh
-  return $ Trees x
+    (_,outh,_,_) <- spawnGitProcess cmd
+    x <- liftIO $ readProc readTreeNodeLine outh
+    return $ Trees x
   where cmd = makeGitCommand (T.pack "ls-tree") [T.pack "HEAD"]
 
 readRevListLine :: ID -> Maybe GitObject 
@@ -63,8 +73,11 @@ catObject :: GitObject -> GitReader (Maybe Text)
 catObject obj = gitAbstractCat args T.hGetContents
   where args = T.words $ getStringFromObj obj 
 
---Really only useful for reading multiple files 
---To use parsers stick the Text into some sort of buffer
+unPackFile :: BlobID -> GitReader (Maybe FilePath)
+unPackFile blob = do 
+    l <- readGit cmd
+    return $ l >>= (\x -> Just $ T.unpack $ T.init $ x)
+  where cmd = makeGitCommand (T.pack "unpack-file") [blob]
 
 catI :: [GitObject] -> Handle -> Handle-> IO [Maybe Text]
 catI [] inh outh = do 
@@ -93,13 +106,13 @@ catObjects objs = do
   return x 
   where cmd = makeGitCommand (T.pack "cat-file") [T.pack "--batch"]
 
-getParents :: Handle -> IO [GitObject]
+getParents :: Handle -> IO [CommitID]
 getParents h = do
   n <- hLookAhead h 
   if n == 'p' then do
     r <- T.hGetLine h
     p <- getParents h
-    return $ Commit (last $ T.words r) : p
+    return $ (T.drop 7 r) : p
 
     else do return []
 
@@ -113,7 +126,7 @@ getPersonAndDate str = Just (p, date)
 readCommit' :: Handle -> IO Commitent
 readCommit' h = do
   tr <- T.hGetLine h
-  let tree = readObjStr' tr 
+  let tree = T.drop 5 tr 
   p  <- getParents h
   al <- T.hGetLine h
   let auth = getPersonAndDate $ T.drop 7 $ al 
@@ -122,7 +135,7 @@ readCommit' h = do
   msg <- T.hGetContents h
   return (Commitent { 
     ceParents       = p
-  , ceTree          = fromJust $ tree
+  , ceTree          = tree
   , ceAuthor        = fst $ fromJust $ auth
   , ceAuthorTime    = snd $ fromJust $ auth
   , ceCommitter     = fst $ fromJust $ commi

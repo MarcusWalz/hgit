@@ -75,3 +75,9 @@ gitTagNew title message commit = runGitCommand cmd
         
 gitTagRm :: Text -> GitReader Bool
 gitTagRm tag = runGitCommand $ makeGitCommand (T.pack "tag") [T.pack "-d", tag]
+
+gitBranchNew :: Text -> GitReader Bool
+gitBranchNew branch = runGitCommand $ makeGitCommand (T.pack "branch") [branch]
+
+gitCheckout :: Text -> GitReader Bool
+gitCheckout branch = runGitCommand $ makeGitCommand (T.pack "checkout") [branch]
