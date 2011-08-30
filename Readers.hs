@@ -13,7 +13,7 @@ import           Lib.HGit.Type
 
 
 --Useful for reading line by line
-readProc :: (Text -> Maybe a) -> Handle -> IO [a]
+readProc :: (Text -> a) -> Handle -> IO [a]
 readProc f h = do
   eof <- hIsEOF h
   if eof 
@@ -21,7 +21,7 @@ readProc f h = do
             return [] 
     else do a <- T.hGetLine h
             m <- readProc f h
-            return $ (maybeToList (f a)) ++ m
+            return $ (f a) : m
 
 
 readGit :: GitCommand -> GitReader (Maybe Text)
@@ -34,11 +34,11 @@ readGit cmd = do
       else liftIO $ do T.putStrLn e
                        return Nothing
 
-readTreeNodeLine :: Text -> Maybe TreeNode
+readTreeNodeLine :: Text -> TreeNode
 readTreeNodeLine str =
-  o >>= \x -> Just TreeNode {mode = m, object = x, name = n}
+  TreeNode {mode = m, object = o, name = n}
   where m = read $ T.unpack $ head w :: Int
-        o = readObjStr' $ T.unwords $ take 2 $ drop 1 w
+        o = readGitObject $ T.unwords $ take 2 $ drop 1 w
         n = T.unwords $ drop 3 w
         w = T.words str 
 
@@ -49,14 +49,13 @@ readTree tree = do
     return $ Trees x
   where cmd = makeGitCommand (T.pack "ls-tree") [fromMaybe (T.pack "HEAD") tree]
 
-readRevListLine :: ID -> Maybe GitObject 
-readRevListLine id = Just $ Commit id
+readRevListLine :: ID -> GitObject 
+readRevListLine id = Commit id
 
 revList :: GitReader [GitObject]
 revList = do 
   (_,outh,_,_) <- spawnGitProcess cmd
-  x <- liftIO $ readProc readRevListLine outh
-  return $ x
+  liftIO $ readProc readRevListLine outh
   where cmd = makeGitCommand (T.pack "rev-list") [T.pack "HEAD"]
 
 
@@ -73,7 +72,7 @@ gitAbstractCat a f = do
 --ByteString in case of binary file / obj like Tree
 catObject :: GitObject -> GitReader (Maybe ByteString)
 catObject obj = gitAbstractCat args B.hGetContents
-  where args = T.words $ getStringFromObj obj
+  where args = T.words $ gitObjectToString obj
 
 unPackFile :: BlobID -> GitReader (Maybe FilePath)
 unPackFile blob = do 
@@ -87,7 +86,7 @@ catI [] inh outh = do
   return []
 
 catI (x:xs) inh outh= do
-  T.hPutStrLn inh $ getIdFromObj x
+  T.hPutStrLn inh $ idFromGitObject x
   hFlush inh
   checkStr <- T.hGetLine outh
   let check = T.unpack $ last $ T.words $ checkStr
@@ -118,8 +117,8 @@ getParents h = do
 
     else do return []
 
-getPersonAndDate :: Text -> Maybe (Person, Text)
-getPersonAndDate str = Just (p, date)
+getPersonAndDate :: Text -> (Person, Text)
+getPersonAndDate str = (p, date)
   where p = Person { personName = name, personEmail = email }
         name = T.init $ T.takeWhile (\x -> x /= '<') str
         email = T.tail $ T.takeWhile (\x -> x /= '>') $ T.dropWhile (\x -> x /= '<') str
@@ -138,10 +137,10 @@ readCommit' h = do
   return (Commitent { 
     ceParents       = p
   , ceTree          = tree
-  , ceAuthor        = fst $ fromJust $ auth
-  , ceAuthorTime    = snd $ fromJust $ auth
-  , ceCommitter     = fst $ fromJust $ commi
-  , ceCommitterTime = snd $ fromJust $ commi
+  , ceAuthor        = fst auth
+  , ceAuthorTime    = snd auth
+  , ceCommitter     = fst commi
+  , ceCommitterTime = snd commi
   , ceCommitMsg     = msg })
 
 readCommit :: CommitID -> GitReader (Maybe Commitent)

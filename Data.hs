@@ -6,7 +6,6 @@ module Lib.HGit.Type
   , GitCommand
   , makeGitCommand
   , GitReader
-  , createGitProcess'
   , createGitProcess
   , spawnGitProcess
   , ID
@@ -19,11 +18,11 @@ module Lib.HGit.Type
   , Commitent(..)
   , TreeNode(..)
   , Trees(..)
-  , readObjStr
-  , readObjStr'
-  , objReader
-  , getIdFromObj
-  , getStringFromObj) where
+  , idFromGitObject
+  , gitObjectToString
+  , makeGitObject
+  , readGitObject
+  ) where
 import           System.Command
 import           System.IO
 import           Control.Monad.Reader
@@ -115,12 +114,12 @@ data TreeNode = TreeNode
 data Trees = Trees [TreeNode]
   deriving (Show)
 
-readObjStr' :: Text -> Maybe GitObject
-readObjStr' str = 
-  readObjStr s objT 
-  where w = T.words str 
-        s = head w
-        objT = last w
+readGitObject :: Text -> GitObject
+readGitObject str = makeGitObject t id
+  where x = T.words str
+        t = head x
+        id = last x 
+
 
 objReader :: [ (Text, ID -> GitObject) ]
 objReader = [ (T.pack "commit" , Commit )
@@ -128,17 +127,18 @@ objReader = [ (T.pack "commit" , Commit )
             , (T.pack "tag"    , Tag    )
             , (T.pack "tree"   , Tree   ) ]
 
-getIdFromObj :: GitObject -> ID
-getIdFromObj (Commit id) = id
-getIdFromObj (Blob   id) = id
-getIdFromObj (Tag    id) = id
-getIdFromObj (Tree   id) = id
+idFromGitObject :: GitObject -> ID
+idFromGitObject (Commit id) = id
+idFromGitObject (Blob   id) = id
+idFromGitObject (Tag    id) = id
+idFromGitObject (Tree   id) = id
 
-getStringFromObj :: GitObject -> Text 
-getStringFromObj (Commit id) = T.unwords $ [T.pack "commit", id]
-getStringFromObj (Blob   id) = T.unwords $ [T.pack "blob"  , id]
-getStringFromObj (Tag    id) = T.unwords $ [T.pack "tag"   , id]
-getStringFromObj (Tree   id) = T.unwords $ [T.pack "tree"  , id]
+gitObjectToString :: GitObject -> Text 
+gitObjectToString (Commit id) = T.unwords $ [T.pack "commit", id]
+gitObjectToString (Blob   id) = T.unwords $ [T.pack "blob"  , id]
+gitObjectToString (Tag    id) = T.unwords $ [T.pack "tag"   , id]
+gitObjectToString (Tree   id) = T.unwords $ [T.pack "tree"  , id]
 
-readObjStr :: Text -> ID -> Maybe GitObject
-readObjStr t id = find (\(x,n) -> t == x) objReader >>= \(x,n) -> Just (n id)
+makeGitObject :: Text -> ID -> GitObject
+makeGitObject t id = c id
+  where c = snd $ fromJust $ find (\(x,n) -> t == x) objReader
