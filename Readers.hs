@@ -1,6 +1,7 @@
 import           System.Command
 import           System.IO
 import           Control.Monad.Reader
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -41,12 +42,12 @@ readTreeNodeLine str =
         n = T.unwords $ drop 3 w
         w = T.words str 
 
-readTree :: GitReader Trees 
-readTree = do
+readTree :: Maybe Text -> GitReader Trees 
+readTree tree = do
     (_,outh,_,_) <- spawnGitProcess cmd
     x <- liftIO $ readProc readTreeNodeLine outh
     return $ Trees x
-  where cmd = makeGitCommand (T.pack "ls-tree") [T.pack "HEAD"]
+  where cmd = makeGitCommand (T.pack "ls-tree") [fromMaybe (T.pack "HEAD") tree]
 
 readRevListLine :: ID -> Maybe GitObject 
 readRevListLine id = Just $ Commit id
@@ -69,9 +70,10 @@ gitAbstractCat a f = do
     else return Nothing
   where cmd = makeGitCommand (T.pack "cat-file") a
 
-catObject :: GitObject -> GitReader (Maybe Text)
-catObject obj = gitAbstractCat args T.hGetContents
-  where args = T.words $ getStringFromObj obj 
+--ByteString in case of binary file / obj like Tree
+catObject :: GitObject -> GitReader (Maybe ByteString)
+catObject obj = gitAbstractCat args B.hGetContents
+  where args = T.words $ getStringFromObj obj
 
 unPackFile :: BlobID -> GitReader (Maybe FilePath)
 unPackFile blob = do 
