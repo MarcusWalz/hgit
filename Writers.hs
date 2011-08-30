@@ -9,6 +9,8 @@ module Lib.HGit.Writers
   , gitCommit
   , gitTagNew
   , gitTagRm
+  , gitBranch
+  , gitCheckout
   ) where
 
 import           System.Command
