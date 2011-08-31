@@ -1,3 +1,17 @@
+module Lib.HGit.Readers
+  ( getTag
+  , getTags
+  , getBranch
+  , getBranches
+  , gitBlobFromTree
+  , readGit
+  , readTree
+  , readCommit
+  , revList 
+  , catObject
+  , catObjects
+  , catObjectUnsafe
+  , unpackFile ) where
 import           System.Command
 import           System.IO
 import           Control.Monad.Reader
@@ -7,14 +21,13 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Data.Text (Text)
 import           Data.Text.Encoding as E
-import           Data.Hex
 import           Data.Maybe
 import           Data.List (find)
 
 import           System.Directory
 import           System.FilePath ((</>))
 
-import           Lib.HGit.Type
+import           Lib.HGit.Data
 
 getDirectory :: FilePath -> GitReader [FilePath]
 getDirectory path = do
@@ -123,8 +136,8 @@ catObject obj = gitAbstractCat obj B.hGetContents
 catObjectUnsafe :: GitObject -> GitReader (Maybe Text)
 catObjectUnsafe obj = gitAbstractCat obj T.hGetContents
 
-unPackFile :: BlobID -> GitReader (Maybe FilePath)
-unPackFile blob = do 
+unpackFile :: BlobID -> GitReader (Maybe FilePath)
+unpackFile blob = do 
     l <- readGit cmd
     return $ l >>= (\x -> Just $ T.unpack $ T.init $ x)
   where cmd = makeGitCommand (T.pack "unpack-file") [blob]

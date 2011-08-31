@@ -1,0 +1,44 @@
+Name:                hgit
+Version:             0.1
+Synopsis:            Git Wrapper
+Homepage:            https://github.com/MarcusWalz/hgit
+License:             BSD3
+License-file:        LICENSE
+Author:              Marcus Walz
+Maintainer:          mewalz@uwm.edu
+Category:            Development
+Build-type:          Simple
+Stability:           Experimental
+data-files:          readme.md
+
+
+-- Extra files to be distributed with the package, such as examples or
+-- a README.
+-- Extra-source-files:  
+
+-- Constraint on the version of Cabal needed to build this package.
+Cabal-version:       >=1.2
+
+
+Library
+  Exposed-modules: Lib.HGit
+                 , Lib.HGit.Readers
+                 , Lib.HGit.Writers
+                 , Lib.HGit.Data
+  
+  Build-depends: base
+               , Command
+               , filepath >= 1
+               , directory >= 1
+               , text
+               , bytestring
+               , mtl >= 2
+  
+  -- Other-modules:       
+  
+  -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
+  -- Build-tools:         
+  
+source-repository head
+  type: git
+  location: git://github.com/MarcusWalz/hgit.git 

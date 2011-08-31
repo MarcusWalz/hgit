@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving #-}
-module Lib.HGit.Type 
+module Lib.HGit.Data 
   ( runGit
   , GitConfig(..)
   , makeGitConfig

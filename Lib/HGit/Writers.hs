@@ -23,7 +23,7 @@ import           Data.Text (Text)
 import           Data.Text.Encoding as E
 import           Data.Maybe
 
-import           Lib.HGit.Type
+import           Lib.HGit.Data
 --Runs a command, returns true if command was successful 
 --Returns false otherwise, error is printed to terminal
 
