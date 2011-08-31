@@ -13,6 +13,7 @@ module Lib.HGit.Type
   , BlobID
   , TagID
   , TreeID
+  , Tag
   , GitObject(..)
   , Person(..)
   , Commitent(..)
@@ -88,7 +89,7 @@ data GitObject = Commit CommitID
                | Blob   BlobID
                | Tree   TreeID
                | Tag    TagID
-  deriving (Show)
+  deriving (Show, Eq)
 
 data Person = Person 
   { personName  :: Text 
@@ -108,8 +109,11 @@ data Commitent = Commitent
 data TreeNode = TreeNode
   { mode      :: Int
   , object    :: GitObject
-  , name      :: Text }
+  , name      :: FilePath }
   deriving (Show)
+
+data Tag = FilePath
+
 
 data Trees = Trees [TreeNode]
   deriving (Show)

@@ -7,9 +7,56 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import           Data.Text (Text)
 import           Data.Text.Encoding as E
+import           Data.Hex
 import           Data.Maybe
+import           Data.List (find)
+
+import           System.Directory
+import           System.FilePath ((</>))
 
 import           Lib.HGit.Type
+
+getDirectory :: FilePath -> GitReader [FilePath]
+getDirectory path = do
+  GitConfig { gitCwd = c } <- ask
+  x <- liftIO $ getDirectoryContents $ c </> path 
+  return $ drop 2 x
+
+getFile :: FilePath -> FilePath -> GitReader (CommitID)
+getFile path obj = do
+    GitConfig { gitCwd = c } <- ask
+    x <-liftIO $ T.readFile (c </> path </> obj)
+    return $ T.init x --remove \n
+
+getTags :: GitReader [FilePath]
+getTags =  getDirectory ".git/refs/tags"
+
+getTag :: FilePath -> GitReader (CommitID)
+getTag = getFile ".get/refs/tags" 
+
+getBranches :: GitReader [FilePath] 
+getBranches = getDirectory ".git/refs/heads"
+
+getBranch :: FilePath -> GitReader (CommitID)
+getBranch = getFile ".git/refs/heads"
+
+gitBlobFromTree :: TreeID -> FilePath -> GitReader (Maybe GitObject)
+gitBlobFromTree tree path = do 
+    (Trees t) <- readTree $ Just tree
+    let fo = find pathMatch t
+    liftIO $ putStrLn p
+    --liftIO $ putStrLn p'
+    if isNothing fo
+      then return Nothing
+      else if p == path 
+        then return $ Just $ obj $ fromJust $ fo
+        else gitBlobFromTree (idFromGitObject $ obj $ fromJust $ fo) p'
+  where pathMatch TreeNode {name = n} = n == p 
+        p = takeWhile (\x -> x /= '/') path
+        p' = tail $ dropWhile (\x -> x /= '/') path
+        obj TreeNode { object = o} = o
+
+
 
 
 --Useful for reading line by line
@@ -39,7 +86,7 @@ readTreeNodeLine str =
   TreeNode {mode = m, object = o, name = n}
   where m = read $ T.unpack $ head w :: Int
         o = readGitObject $ T.unwords $ take 2 $ drop 1 w
-        n = T.unwords $ drop 3 w
+        n = T.unpack $ T.unwords $ drop 3 w
         w = T.words str 
 
 readTree :: Maybe Text -> GitReader Trees 
@@ -59,20 +106,22 @@ revList = do
   where cmd = makeGitCommand (T.pack "rev-list") [T.pack "HEAD"]
 
 
-gitAbstractCat :: [Text] -> (Handle -> IO a) -> GitReader (Maybe a)
+gitAbstractCat :: GitObject -> (Handle -> IO a) -> GitReader (Maybe a)
 gitAbstractCat a f = do
-  (inh, outh, errh, pid) <- spawnGitProcess cmd
+  (_, outh, errh, pid) <- spawnGitProcess cmd
   a <- liftIO $ T.hGetContents errh
   if a == T.empty 
     then do x <- liftIO $ f outh 
             return $ Just x
     else return Nothing
-  where cmd = makeGitCommand (T.pack "cat-file") a
+  where cmd = makeGitCommand (T.pack "cat-file") (T.words $ gitObjectToString a)
 
 --ByteString in case of binary file / obj like Tree
 catObject :: GitObject -> GitReader (Maybe ByteString)
-catObject obj = gitAbstractCat args B.hGetContents
-  where args = T.words $ gitObjectToString obj
+catObject obj = gitAbstractCat obj B.hGetContents
+
+catObjectUnsafe :: GitObject -> GitReader (Maybe Text)
+catObjectUnsafe obj = gitAbstractCat obj T.hGetContents
 
 unPackFile :: BlobID -> GitReader (Maybe FilePath)
 unPackFile blob = do 
@@ -144,5 +193,4 @@ readCommit' h = do
   , ceCommitMsg     = msg })
 
 readCommit :: CommitID -> GitReader (Maybe Commitent)
-readCommit id = gitAbstractCat obj readCommit'
-  where obj = [T.pack "commit", id]
+readCommit id = gitAbstractCat (Commit id) readCommit'
