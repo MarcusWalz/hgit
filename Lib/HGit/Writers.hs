@@ -9,7 +9,7 @@ module Lib.HGit.Writers
   , gitCommit
   , gitTagNew
   , gitTagRm
-  , gitBranch
+  , gitBranchNew
   , gitCheckout
   ) where
 
