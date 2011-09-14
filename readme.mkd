@@ -1,29 +1,39 @@
-HGit Version negative one 
+HGit Version Negative One 
 ================================================================================
 by Marcus Walz mewalz at uwm edu
 
-Haskell Git Module. Works by spawning the git module and reading the file. Uses
-Data.Text and batch processing to reduce latency where possible. The module is 
-surprisingly quick. Unicode compatible.
+Haskell Git Module. Works by spawning the git module and reading the file. It
+makes use of the file system and the batch interface  wherever applicable to
+avoid spawning too many Git processes. That being said, git is very optimized so
+spawning a git process is very quick.
 
-The code is *very* incomplete and not suitable for any use. I am very new to
-Haskell, so I would love for you to critique my code. 
+The code is still *very* incomplete and probably not suited for any sort of use,
+be assured that function names will be changed in later versions. That being
+said, this is probably the comprehensive Git library currently available for
+Haskell. Though it is still very incomplete. 
 
-The code will be released under a BSD license.  
+This is my first major Haskell project, so I am sort of making things up as I go
+along. I would love to hear feedback on my code.
+
+The code is released under a permissive BSD license. 
 
 Based largely on vincenthz's
 [libgit](https://github.com/vincenthz/hs-libgit/blob/master/Lib/Git/Tree.hs)
 
+There are also LibGit2 bindings available.
+
 Example Usage
 -------------------------------------------------------------------------------
-After HGit is installed
+After HGit is installed. This example clones a git repository and grabs each
+commit.
 
     $ mkdir dir
     $ ghci
 
-    > :m +Lib.HGit +Data.Text.Lazy
-    > makeGitConfig "dir/" Nothing
-    > let url = pack "https://MarcusWalz@github.com/MarcusWalz/hgit.git"
+    > :m +Lib.HGit Data.Text.Lazy
+    > let c = makeGitConfig "dir/" Nothing
+    > let url = pack "https://github.com/MarcusWalz/hgit.git"
     > runGit c $ gitClone url
     > revs <- runGit c $ revList
     > commits <- runGit c $ catObjects revs 
+    > commits
