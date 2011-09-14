@@ -18,6 +18,7 @@ Example Usage
 -------------------------------------------------------------------------------
 After HGit is installed
 
+``
 $ mkdir dir
 $ ghci
 
@@ -27,3 +28,5 @@ $ ghci
 > runGit c $ gitClone url
 > revs <- runGit c $ revList
 > commits <- runGit c $ catObjects revs 
+``
+
