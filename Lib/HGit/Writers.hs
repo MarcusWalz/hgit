@@ -44,7 +44,7 @@ gitInit = runGitCommand $ makeGitCommand (T.pack "init") []
 
 gitClone :: Text -> GitReader Bool
 gitClone url = runGitCommand cmd
-  where cmd = makeGitCommand (T.pack "clone") [url]
+  where cmd = makeGitCommand (T.pack "clone") [url, T.pack "."]
 
 gitAdd :: FilePath -> GitReader Bool
 gitAdd file = gitAddFiles [file]

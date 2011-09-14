@@ -11,7 +11,7 @@ module Lib.HGit.Readers
   , revList 
   , catObject
   , catObjectUnsafe
---, catObjects
+  , catObjects
   , unpackFile ) where
 
 import           System.Command
@@ -58,8 +58,17 @@ getBranch :: FilePath -> GitReader (CommitID)
 getBranch = getFile ".git/refs/heads"
 
 
---Searches a tree for an object
---NO IO! It's Magic!
+catObjects :: [GitObject] -> GitReader [Maybe ByteString]
+catObjects objs = gitCatBatch (idFromGitObject $ head objs, Just (tail objs, [])) catObjects'
+
+catObjects' :: Maybe ([GitObject], [Maybe ByteString])
+            -> Maybe ByteString
+            -> (Either (ID, Maybe ([GitObject], [Maybe ByteString])) [Maybe ByteString])
+
+catObjects' (Just ([], cats)) b = Right (cats ++ [b])
+catObjects' (Just (objs, cats)) b = Left (idFromGitObject $ head objs, 
+                                    Just (tail objs, cats ++ [b]))
+
 gitBlobFromTree :: TreeID -> FilePath -> GitReader (Maybe GitObject)
 gitBlobFromTree tree path = gitCatBatch (tree, Just path) traverse  
 
@@ -180,7 +189,6 @@ gitCatBatch' inh outh f (id', b') = do
   case (f b' str) of 
     Left (id, b) -> gitCatBatch' inh outh f (id, b)
     Right a -> do
-     putStrLn "exiting"
      hClose inh
      hClose outh
      return $ a
