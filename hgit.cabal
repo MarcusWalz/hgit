@@ -32,6 +32,7 @@ Library
                , directory >= 1
                , text
                , bytestring
+               , hex
                , mtl >= 2
   
   -- Other-modules:       

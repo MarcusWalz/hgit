@@ -17,10 +17,10 @@ import           System.Command
 import           System.IO
 import           Control.Monad.Reader
 import qualified Data.ByteString as B
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import           Data.Text (Text)
-import           Data.Text.Encoding as E
+import           Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
+import qualified Data.Text.Lazy.IO as T
+import           Data.Text.Lazy.Encoding as E
 import           Data.Maybe
 
 import           Lib.HGit.Data

@@ -28,8 +28,8 @@ import           System.Command
 import           System.IO
 import           Control.Monad.Reader
 import           Data.Maybe
-import qualified Data.Text as T
-import           Data.Text (Text)
+import qualified Data.Text.Lazy as T
+import           Data.Text.Lazy (Text)
 import           Data.Text.Encoding as E
 import           Data.List (find)
 
