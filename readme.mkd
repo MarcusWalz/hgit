@@ -18,15 +18,12 @@ Example Usage
 -------------------------------------------------------------------------------
 After HGit is installed
 
-``
-$ mkdir dir
-$ ghci
+    $ mkdir dir
+    $ ghci
 
-> :m +Lib.HGit +Data.Text.Lazy
-> makeGitConfig "dir/" Nothing
-> let url = pack "https://MarcusWalz@github.com/MarcusWalz/hgit.git"
-> runGit c $ gitClone url
-> revs <- runGit c $ revList
-> commits <- runGit c $ catObjects revs 
-``
-
+    > :m +Lib.HGit +Data.Text.Lazy
+    > makeGitConfig "dir/" Nothing
+    > let url = pack "https://MarcusWalz@github.com/MarcusWalz/hgit.git"
+    > runGit c $ gitClone url
+    > revs <- runGit c $ revList
+    > commits <- runGit c $ catObjects revs 
