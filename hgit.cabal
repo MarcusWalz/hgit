@@ -9,7 +9,7 @@ Maintainer:          mewalz@uwm.edu
 Category:            Development
 Build-type:          Simple
 Stability:           Experimental
-data-files:          readme.md
+data-files:          readme.mkd
 
 
 -- Extra files to be distributed with the package, such as examples or

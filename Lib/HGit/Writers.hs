@@ -1,3 +1,7 @@
+-- | Simple Wrappers for Git Commands
+-- | Each function returns either True of False depending on whether the 
+-- | command was successful.
+
 module Lib.HGit.Writers
   ( runGitCommand
   , gitInit
@@ -24,6 +28,7 @@ import           Data.Text.Lazy.Encoding as E
 import           Data.Maybe
 
 import           Lib.HGit.Data
+
 --Runs a command, returns true if command was successful 
 --Returns false otherwise, error is printed to terminal
 
