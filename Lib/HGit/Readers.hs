@@ -12,7 +12,6 @@ module Lib.HGit.Readers
   , revList 
   , catObject
   , catObjectUnsafe
-  , catObjects
   , unpackFile ) where
 
 import           System.Command
@@ -39,7 +38,7 @@ gitHeadID :: GitReader CommitID
 gitHeadID = do
   GitConfig {gitCwd = dir} <- ask
   h <- liftIO $ readFile $ dir </> ".git/HEAD"
-  c <- liftIO $ T.readFile $ dir </> ".git" </> (init $ drop 5 $ h) --the commit
+  c <- liftIO $ T.readFile $ dir </> ".git" </> init ( drop 5 h ) --the commit
   return $ T.init c
 
 gitHeadTree :: GitReader Trees
@@ -47,9 +46,9 @@ gitHeadTree = do
   id <- gitHeadID
   gitCatBatch (id, Nothing) gitHeadTree' 
 
-gitHeadTree' :: Maybe Bool -> Maybe ByteString -> (Either (ID, Maybe Bool) Trees)
+gitHeadTree' :: Maybe Bool -> Maybe ByteString -> Either (ID, Maybe Bool) Trees
 gitHeadTree' (Just True) (Just str) = Right $ readTreeString str
-gitHeadTree' Nothing     (Just str) = Left $ (tr $ readCommitStr str, Just True)
+gitHeadTree' Nothing     (Just str) = Left (tr $ readCommitStr str, Just True)
   where tr Commitent {ceTree = t} = t
 
 getDirectory :: FilePath -> GitReader [FilePath]
@@ -58,7 +57,7 @@ getDirectory path = do
   x <- liftIO $ getDirectoryContents $ c </> path 
   return $ drop 2 x
 
-getFile :: FilePath -> FilePath -> GitReader (CommitID)
+getFile :: FilePath -> FilePath -> GitReader CommitID
 getFile path obj = do
     GitConfig { gitCwd = c } <- ask
     x <-liftIO $ T.readFile (c </> path </> obj)
@@ -69,7 +68,7 @@ getTags :: GitReader [FilePath]
 getTags =  getDirectory ".git/refs/tags"
 
 -- | Return the CommitID for a given tag
-getTag :: FilePath -> GitReader (CommitID)
+getTag :: FilePath -> GitReader CommitID
 getTag = getFile ".get/refs/tags" 
 
 -- | Returns a list of Branches 
@@ -77,43 +76,27 @@ getBranches :: GitReader [FilePath]
 getBranches = getDirectory ".git/refs/heads"
 
 -- | Returns the head CommitID for a given branch
-getBranch :: FilePath -> GitReader (CommitID)
+getBranch :: FilePath -> GitReader CommitID
 getBranch = getFile ".git/refs/heads"
-
-
-catObjects :: [GitObject] -> GitReader [Maybe ByteString]
-catObjects objs = gitCatBatch (idFromGitObject $ head objs, Just (tail objs, [])) catObjects'
-
-catObjects' :: Maybe ([GitObject], [Maybe ByteString])
-            -> Maybe ByteString
-            -> (Either (ID, Maybe ([GitObject], [Maybe ByteString])) [Maybe ByteString])
-
-catObjects' (Just ([], cats)) b = Right (cats ++ [b])
-catObjects' (Just (objs, cats)) b = Left (idFromGitObject $ head objs, 
-                                    Just (tail objs, cats ++ [b]))
 
 gitBlobFromTree :: TreeID -> FilePath -> GitReader (Maybe GitObject)
 gitBlobFromTree tree path = gitCatBatch (tree, Just path) traverse  
 
 traverse :: Maybe FilePath
          -> Maybe ByteString 
-         -> (Either (ID, Maybe FilePath) (Maybe GitObject))
-traverse (Just path) tree =
-  if isNothing tree
-    then return Nothing
-    else if isNothing fi
-            then Right Nothing
-            else if p == path 
-                    then Right $ Just $ obj $ fromJust $ fi
-                    else Left (idFromGitObject $ obj $ fromJust fi, Just p')
-  where
-    (Trees t) = readTreeString $ fromJust tree 
-    pathMatch TreeNode {name = n} = n == p
-    fi= find pathMatch t
-    p = takeWhile (\x -> x /= '/') path
-    p' =  drop (length p + 1) path
-    obj TreeNode { object = o } = o
-
+         -> Either (ID, Maybe FilePath) (Maybe GitObject)
+traverse (Just path) tree
+    | isNothing tree = return Nothing
+    | isNothing fi = Right Nothing
+    | p == path = Right $ Just $ obj $ fromJust fi
+    | otherwise = Left (idFromGitObject $ obj $ fromJust fi, Just p')
+    where (Trees t) = readTreeString $ fromJust tree
+          pathMatch TreeNode{name = n} = n == p
+          fi = find pathMatch t
+          p = takeWhile (/= '/') path
+          p' = drop (length p + 1) path
+          obj TreeNode{object = o} = o
+ 
 --Useful for reading line by line
 readProc :: (Text -> a) -> Handle -> IO [a]
 readProc f h = do
@@ -123,7 +106,7 @@ readProc f h = do
             return [] 
     else do a <- T.hGetLine h
             m <- readProc f h
-            return $ (f a) : m
+            return $ f a : m
 
 
 -- | Returns output of git command as Text
@@ -140,10 +123,10 @@ readGit cmd = do
 readTreeNodeLine :: ByteString -> [TreeNode]
 readTreeNodeLine str = 
   TreeNode {mode = m, object = obj, name = file} : next 
-  where (a,b) = B.break (\x -> x == (c2w '\0')) str
+  where (a,b) = B.break (\x -> x == c2w '\0') str
         x = T.words $ T.decodeUtf8 a
         mode = head x
-        m = read $ T.unpack $ mode
+        m = read $ T.unpack mode
         file = T.unpack $ last x
         id = T.decodeUtf8 $ hex $ B.take 20 $ B.tail b
         obj = if m == 40000 --TODO: Support SymLinks
@@ -162,7 +145,7 @@ readTree tree = do
     return $ readTreeString x
 
 readRevListLine :: ID -> GitObject 
-readRevListLine id = Commit id
+readRevListLine = Commit
 
 -- | Returns a list of CommitID's in reverse chronological order
 -- TODO: options
@@ -196,11 +179,11 @@ catObjectUnsafe obj = gitAbstractCat obj T.hGetContents
 unpackFile :: BlobID -> GitReader (Maybe FilePath)
 unpackFile blob = do 
     l <- readGit cmd
-    return $ l >>= (\x -> Just $ T.unpack $ T.init $ x)
+    return $ l >>= Just . T.unpack . T.init
   where cmd = makeGitCommand (T.pack "unpack-file") [blob]
 
 gitCatBatch :: (ID, Maybe b)
-            -> (Maybe b -> Maybe ByteString -> (Either (ID, Maybe b) a)) 
+            -> (Maybe b -> Maybe ByteString -> Either (ID, Maybe b) a) 
             -> GitReader a
 gitCatBatch x f = do  
   (inh, outh, _, pid) <- spawnGitProcess cmd
@@ -208,59 +191,60 @@ gitCatBatch x f = do
   where cmd = makeGitCommand (T.pack "cat-file") [T.pack "--batch"]
 
 gitCatBatch' :: Handle -> Handle 
-             -> (Maybe b -> Maybe ByteString -> (Either (ID, Maybe b) a))
+             -> (Maybe b -> Maybe ByteString -> Either (ID, Maybe b) a)
              -> (ID, Maybe b) 
              -> IO a
 
 gitCatBatch' inh outh f (id', b') = do
   str <- gitCatBatch'' inh outh id'
-  case (f b' str) of 
+  case f b' str of 
     Left (id, b) -> gitCatBatch' inh outh f (id, b)
     Right a -> do
      hClose inh
      hClose outh
-     return $ a
+     return a
 
 gitCatBatch'' :: Handle -> Handle -> ID -> IO (Maybe ByteString)
 gitCatBatch'' inh outh id = do 
   T.hPutStrLn inh id 
   hFlush inh
   r <- T.hGetLine outh
-  let check = T.unpack $ last $ T.words $ r 
+  let check = T.unpack $ last $ T.words r 
   if check == "missing"
     then do putStrLn "object not found"
             return Nothing
     else do 
-      x <- B.hGet outh $ read $ check
+      x <- B.hGet outh $ read check
       hGetLine outh
       return $ Just x
 
 getParents :: Handle -> IO [CommitID]
 getParents h = do
   n <- hLookAhead h 
-  if n == 'p' then do
-    r <- T.hGetLine h
-    p <- getParents h
-    return $ (T.drop 7 r) : p
-    else do return []
+  if n == 'p' 
+    then do
+      r <- T.hGetLine h
+      p <- getParents h
+      return $ T.drop 7 r : p
+    else return []
 
 getPersonAndDate :: Text -> (Person, Text)
 getPersonAndDate str = (p, date)
   where p = Person { personName = name, personEmail = email }
-        name = T.init $ T.takeWhile (\x -> x /= '<') str
-        email = T.tail $ T.takeWhile (\x -> x /= '>') $ T.dropWhile (\x -> x /= '<') str
-        date = T.drop 2 $ T.dropWhile (\x -> x /= '>') str 
+        name = T.init $ T.takeWhile (/= '<') str
+        email = T.tail $ T.takeWhile (/= '>') $ T.dropWhile (/= '<') str
+        date = T.drop 2 $ T.dropWhile (/= '>') str 
  
 readCommitStr :: ByteString -> Commitent
 readCommitStr str = Commitent parents tree auth authDate comitr comitrDate msg
   where l = T.lines $ T.decodeUtf8 str
         tree = T.drop 5 $ head l 
-        parents' = takeWhile (\x -> (T.take 6 x) == (T.pack "parent")) (tail l)
+        parents' = takeWhile (\x -> T.take 6 x == T.pack "parent") (tail l)
         parents = map (T.drop 7) parents'
         rest = drop (length parents + 1) l
-        (auth, authDate) = getPersonAndDate $ T.drop 7 $ head $ rest  
-        (comitr, comitrDate) = getPersonAndDate $ T.drop 10 $ head $ tail $ rest
-        msg = T.init $ T.unlines $ drop 3 $ rest
+        (auth, authDate) = getPersonAndDate $ T.drop 7 $ head rest  
+        (comitr, comitrDate) = getPersonAndDate $ T.drop 10 $ head $ tail rest
+        msg = T.init $ T.unlines $ drop 3 rest
 
 -- Read a single commit
 readCommit :: CommitID -> GitReader (Maybe Commitent)
