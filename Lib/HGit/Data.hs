@@ -2,9 +2,7 @@
 module Lib.HGit.Data 
   ( runGit
   , GitConfig(..)
-  , makeGitConfig
-  , GitCommand
-  , makeGitCommand
+  , GitCommand(..)
   , GitReader
   , createGitProcess
   , spawnGitProcess
@@ -38,19 +36,22 @@ data GitConfig  = GitConfig
   , gitPath  :: Maybe FilePath }
   deriving (Show)
 
-makeGitConfig :: FilePath -> Maybe FilePath -> GitConfig
-makeGitConfig cwd' gitPath' = GitConfig {gitCwd = cwd', gitPath = gitPath'}
+  
+newtype GitReader a = GitReader (ReaderT GitConfig IO a)
+  deriving (Monad, MonadIO, MonadReader GitConfig)
+
+runGit :: GitConfig -> GitReader t -> IO t
+runGit config (GitReader a) = runReaderT a config
 
 data GitCommand = GitCommand
   { gitCmd  :: Text 
   , args :: [Text] }
   deriving (Show)
-  
-makeGitCommand :: Text -> [Text] -> GitCommand 
-makeGitCommand cmd args' = GitCommand {gitCmd = cmd, args = args'}
 
-newtype GitReader a = GitReader (ReaderT GitConfig IO a)
-  deriving (Monad, MonadIO, MonadReader GitConfig)
+createGitProcess :: GitCommand -> GitReader CreateProcess 
+createGitProcess command = do
+  conf <- ask
+  return $ createGitProcess' conf command
 
 createGitProcess' :: GitConfig -> GitCommand -> CreateProcess
 createGitProcess' GitConfig  { gitCwd = gitCwd', gitPath = gitPath }
@@ -61,23 +62,16 @@ createGitProcess' GitConfig  { gitCwd = gitCwd', gitPath = gitPath }
   , std_out = CreatePipe 
   , std_err = CreatePipe 
   , close_fds = True }
-  where args'' = map T.unpack $ [cmd] ++ args'
+  where args'' = map T.unpack $ cmd : args'
 
-createGitProcess :: GitCommand -> GitReader CreateProcess 
-createGitProcess command = do
-  conf <- ask
-  return $ createGitProcess' conf command
-
--- This function works because of Magic!!! 
 spawnGitProcess :: GitCommand 
                 -> GitReader (Handle, Handle, Handle, ProcessHandle)
 spawnGitProcess command = do
   proc <- createGitProcess command 
-  (Just inh, Just outh, Just errh, pid) <- liftIO $ createProcess $ proc 
+  (Just inh, Just outh, Just errh, pid) <- liftIO $ createProcess proc 
   return (inh, outh, errh, pid)
 
-runGit :: GitConfig -> GitReader t -> IO t
-runGit config (GitReader a) = runReaderT a config
+
 
 type ID       = Text 
 type CommitID = ID 
@@ -125,11 +119,6 @@ readGitObject str = makeGitObject t id
         id = last x 
 
 
-objReader :: [ (Text, ID -> GitObject) ]
-objReader = [ (T.pack "commit" , Commit )
-            , (T.pack "blob"   , Blob   )
-            , (T.pack "tag"    , Tag    )
-            , (T.pack "tree"   , Tree   ) ]
 
 idFromGitObject :: GitObject -> ID
 idFromGitObject (Commit id) = id
@@ -138,10 +127,16 @@ idFromGitObject (Tag    id) = id
 idFromGitObject (Tree   id) = id
 
 gitObjectToString :: GitObject -> Text 
-gitObjectToString (Commit id) = T.unwords $ [T.pack "commit", id]
-gitObjectToString (Blob   id) = T.unwords $ [T.pack "blob"  , id]
-gitObjectToString (Tag    id) = T.unwords $ [T.pack "tag"   , id]
-gitObjectToString (Tree   id) = T.unwords $ [T.pack "tree"  , id]
+gitObjectToString (Commit id) = T.unwords [T.pack "commit", id]
+gitObjectToString (Blob   id) = T.unwords [T.pack "blob"  , id]
+gitObjectToString (Tag    id) = T.unwords [T.pack "tag"   , id]
+gitObjectToString (Tree   id) = T.unwords [T.pack "tree"  , id]
+
+objReader :: [ (Text, ID -> GitObject) ]
+objReader = [ (T.pack "commit" , Commit )
+            , (T.pack "blob"   , Blob   )
+            , (T.pack "tag"    , Tag    )
+            , (T.pack "tree"   , Tree   ) ]
 
 makeGitObject :: Text -> ID -> GitObject
 makeGitObject t id = c id

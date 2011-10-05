@@ -23,6 +23,7 @@ Cabal-version:       >=1.2
 Library
   Exposed-modules: Lib.HGit
                  , Lib.HGit.Readers
+                 , Lib.HGit.Batch
                  , Lib.HGit.Writers
                  , Lib.HGit.Data
   

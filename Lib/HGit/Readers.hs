@@ -1,13 +1,16 @@
 -- | Querys Git 
 module Lib.HGit.Readers
-  ( getTag
+  ( gitHeadID
+  , gitHeadTree
+  , getTag
   , getTags
   , getBranch
   , getBranches
   , gitBlobFromTree
-  , readGit
+  , gitReadGitProc
   , readTree
   , readTreeString
+  , readCommitStr
   , readCommit
   , revList 
   , catObject
@@ -25,7 +28,7 @@ import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.IO as T
 import           Data.Text.Lazy.Encoding as T
 import           Data.Maybe
-import           Data.List (find)
+import           Data.List (find,(\\))
 import           Data.Either
 import           Data.Hex
 import           System.Directory
@@ -55,10 +58,10 @@ getDirectory :: FilePath -> GitReader [FilePath]
 getDirectory path = do
   GitConfig { gitCwd = c } <- ask
   x <- liftIO $ getDirectoryContents $ c </> path 
-  return $ drop 2 x
+  return $ x \\ [".", ".."]
 
-getFile :: FilePath -> FilePath -> GitReader CommitID
-getFile path obj = do
+gitOpenFile :: FilePath -> FilePath -> GitReader CommitID
+gitOpenFile path obj = do
     GitConfig { gitCwd = c } <- ask
     x <-liftIO $ T.readFile (c </> path </> obj)
     return $ T.init x --remove \n
@@ -69,7 +72,7 @@ getTags =  getDirectory ".git/refs/tags"
 
 -- | Return the CommitID for a given tag
 getTag :: FilePath -> GitReader CommitID
-getTag = getFile ".get/refs/tags" 
+getTag = gitOpenFile ".get/refs/tags" 
 
 -- | Returns a list of Branches 
 getBranches :: GitReader [FilePath] 
@@ -77,7 +80,7 @@ getBranches = getDirectory ".git/refs/heads"
 
 -- | Returns the head CommitID for a given branch
 getBranch :: FilePath -> GitReader CommitID
-getBranch = getFile ".git/refs/heads"
+getBranch = gitOpenFile ".git/refs/heads"
 
 gitBlobFromTree :: TreeID -> FilePath -> GitReader (Maybe GitObject)
 gitBlobFromTree tree path = gitCatBatch (tree, Just path) traverse  
@@ -110,8 +113,8 @@ readProc f h = do
 
 
 -- | Returns output of git command as Text
-readGit :: GitCommand -> GitReader (Maybe Text)
-readGit cmd = do  
+gitReadGitProc :: GitCommand -> GitReader (Maybe Text)
+gitReadGitProc cmd = do  
     (_,outh, errh, pid) <- spawnGitProcess cmd
     e <- liftIO $ T.hGetContents errh
     if e == T.empty
@@ -153,7 +156,7 @@ revList :: GitReader [GitObject]
 revList = do 
   (_,outh,_,_) <- spawnGitProcess cmd
   liftIO $ readProc readRevListLine outh
-  where cmd = makeGitCommand (T.pack "rev-list") [T.pack "HEAD"]
+  where cmd = GitCommand (T.pack "rev-list") [T.pack "HEAD"]
 
 -- | cat a git object with some sort of reader function 
 gitAbstractCat :: GitObject -> (Handle -> IO a) -> GitReader (Maybe a)
@@ -164,7 +167,7 @@ gitAbstractCat a f = do
     then do x <- liftIO $ f outh 
             return $ Just x
     else return Nothing
-  where cmd = makeGitCommand (T.pack "cat-file") (T.words $ gitObjectToString a)
+  where cmd = GitCommand (T.pack "cat-file") (T.words $ gitObjectToString a)
 
 -- | Cat a GitObject 
 catObject :: GitObject -> GitReader (Maybe ByteString)
@@ -178,9 +181,9 @@ catObjectUnsafe obj = gitAbstractCat obj T.hGetContents
 -- | Creates a temporary file holding the contents of a GitBlob
 unpackFile :: BlobID -> GitReader (Maybe FilePath)
 unpackFile blob = do 
-    l <- readGit cmd
+    l <- gitReadGitProc cmd
     return $ l >>= Just . T.unpack . T.init
-  where cmd = makeGitCommand (T.pack "unpack-file") [blob]
+  where cmd = GitCommand (T.pack "unpack-file") [blob]
 
 gitCatBatch :: (ID, Maybe b)
             -> (Maybe b -> Maybe ByteString -> Either (ID, Maybe b) a) 
@@ -188,7 +191,7 @@ gitCatBatch :: (ID, Maybe b)
 gitCatBatch x f = do  
   (inh, outh, _, pid) <- spawnGitProcess cmd
   liftIO $ gitCatBatch' inh outh f x 
-  where cmd = makeGitCommand (T.pack "cat-file") [T.pack "--batch"]
+  where cmd = GitCommand (T.pack "cat-file") [T.pack "--batch"]
 
 gitCatBatch' :: Handle -> Handle 
              -> (Maybe b -> Maybe ByteString -> Either (ID, Maybe b) a)
@@ -218,15 +221,6 @@ gitCatBatch'' inh outh id = do
       hGetLine outh
       return $ Just x
 
-getParents :: Handle -> IO [CommitID]
-getParents h = do
-  n <- hLookAhead h 
-  if n == 'p' 
-    then do
-      r <- T.hGetLine h
-      p <- getParents h
-      return $ T.drop 7 r : p
-    else return []
 
 getPersonAndDate :: Text -> (Person, Text)
 getPersonAndDate str = (p, date)
