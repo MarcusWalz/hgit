@@ -26,6 +26,7 @@ Library
                  , Lib.HGit.Batch
                  , Lib.HGit.Writers
                  , Lib.HGit.Data
+                 , Lib.HGit.Parsers
   
   Build-depends: base
                , Command

@@ -5,7 +5,7 @@ module Lib.HGit.Batch
   , makeGitBatch
   , runGitBatch
   , runGitBatch'
-  , revvlist
+  , readObject
   ) where
 
 import           System.IO
@@ -19,7 +19,6 @@ import qualified Data.ByteString.Lazy as B
 import           Data.Maybe
 
 import           Lib.HGit.Data
-import           Lib.HGit.Readers --DataBatch should work indep. of readers
 
 data GitBatch = GitBatch
   { inh  :: Handle
@@ -53,7 +52,6 @@ destroyGitBatch (GitBatch inh outh) = do
   hClose inh
   hClose outh
 
-
 readObject :: ID -> GitBatchM (Maybe ByteString)
 readObject id = do
   GitBatch inh outh <- ask
@@ -68,18 +66,3 @@ readObject id = do
         x <- B.hGet outh $ read check
         hGetLine outh --clear \n
         return $ Just x
-
---Mimic's Git's rev-list function (super bad ass)
-revvlist :: CommitID -> GitBatchM [CommitID]
-revvlist id = revvlist' id >>= \x -> return $ id : x
-
-revvlist' :: CommitID -> GitBatchM [CommitID]
-revvlist' id = do 
-  c <- readObject id
-  if c == Nothing
-    then return []
-    else do 
-      let parents = parens $ readCommitStr $ fromJust c
-      pp <-mapM revvlist' parents
-      return $ parents ++ (concat pp)
-  where parens Commitent {ceParents = p} = p 
